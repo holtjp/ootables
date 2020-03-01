@@ -80,7 +80,7 @@ class CoreObject:
     # In PowerPoint, they are Presentations and Slides
     #
     # To avoid rewriting code, this must exist for inheritance
-    def __init__(self, oofile, xml_path, rel_xml_path):   # application, name):
+    def __init__(self, oofile, xml_path, rel_xml_path=None):  # application, name):
         self._oofile = oofile
 
         # self.application = application
@@ -91,7 +91,8 @@ class CoreObject:
         #   workbook, sheetN
         #   document
         #   presentation, slideN
-        self.__set_rels(rel_xml_path)
+        if rel_xml_path:
+            self.__set_rels(rel_xml_path)
 
     # @property
     # def application(self):

@@ -1,7 +1,178 @@
 import re
+import string
 import zipfile as zf
 
 from ootables import core
+
+
+def col_to_int(s):
+    return int(''.join([str(string.ascii_uppercase.index(c)) for c in s]))
+
+
+class ExcelRange:
+    def __init__(self, range):
+        self.__range = range
+        self.__set_props(range)
+
+    @property
+    def range(self):
+        return self.__range
+
+    @property
+    def start(self):
+        return self.__start
+
+    @property
+    def end(self):
+        return self.__end
+
+    @property
+    def left_bound(self):
+        return self.__start_col
+
+    @property
+    def left_bound_n(self):
+        return self.__start_col_n
+
+    @property
+    def right_bound(self):
+        return self.__end_col
+
+    @property
+    def right_bound_n(self):
+        return self.__end_col_n
+
+    @property
+    def upper_bound(self):
+        return self.__start_row
+
+    @property
+    def lower_bound(self):
+        return self.__end_row
+
+    def __parse_loc(self, s):
+        col, row = str(), str()
+        for c in s:
+            try:
+                int(c)
+                row += c
+            except ValueError:
+                col += c
+        return col, row
+
+    def __set_props(self, r):
+        self.__start, self.__end = r.split(':')
+        self.__start_col, self.__start_row = self.__parse_loc(self.__start)
+        self.__end_col, self.__end_row = self.__parse_loc(self.__end)
+        self.__start_col_n = col_to_int(self.__start_col)
+        self.__end_col_n = col_to_int(self.__end_col)
+
+
+class ExcelCell:
+    def __init__(self, index, value):    # , type=None):
+        self.__index = index
+        self.__set_row_col(index)
+        # self.__type = type
+        self.__set_value(value)
+
+    def __repr__(self):
+        return f"ExcelCell(index='{self.__index}', value='{self.__value}')"
+
+    @property
+    def index(self):
+        return self.__index
+
+    @property
+    def row(self):
+        return self.__row
+
+    @property
+    def col(self):
+        return self.__col
+
+    @property
+    def col_n(self):
+        return self.__col_n
+
+    def __set_row_col(self, s):
+        self.__row, self.__col = str(), str()
+        for c in s:
+            try:
+                int(c)
+                self.__row += c
+            except ValueError:
+                self.__col += c
+        self.__col_n = col_to_int(self.__col)
+
+    # @property
+    # def type(self):
+    #     return self.__type
+
+    @property
+    def value(self):
+        return self.__value
+
+    def __set_value(self, value):
+        # Update this to change the type of the value to a Python type?
+        self.__value = value
+
+
+class ExcelRow:
+    # An ExcelRow is a list of ExcelCells
+    def __init__(self, index, span, cells):
+        self.__index = index
+        self.__span = span
+        self.__cells = cells
+
+    @property
+    def index(self):
+        return self.__index
+
+    @property
+    def span(self):
+        return self.__span
+
+    @property
+    def cells(self):
+        return self.__cells
+
+
+class ExcelColumn:
+    def __init__(self, id, name):
+        self.__id = id
+        self.__name = name
+
+    @property
+    def id(self):
+        return self.__id
+
+    @property
+    def name(self):
+        return self.__name
+
+
+class ExcelTable:
+    def __init__(self, name, display_name, range, rows, columns):
+        self.__name = name
+        self.__display_name = display_name
+        self.__range = range
+        self.__rows = rows
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def display_name(self):
+        return self.__display_name
+
+    @property
+    def range(self):
+        return self.__range
+
+    @property
+    def rows(self):
+        return self.__rows
 
 
 class SharedString:
@@ -29,6 +200,9 @@ class Sheet(core.CoreObject):
             self.__xml_doc = core.XMLDoc(f.read())
         self.__id = id
         self.__name = name
+        self.__strings = strings
+        self.__set_data(core.get_elements(self.__xml_doc, 'row'))
+        self.__set_tables(core.get_elements(self.__xml_doc, 'tablePart'))
 
     def __repr__(self):
         return f"Sheet(name='{self.__name}')"
@@ -40,6 +214,80 @@ class Sheet(core.CoreObject):
     @property
     def name(self):
         return self.__name
+
+    @property
+    def data(self):
+        return self.__data
+
+    def __set_data(self, row_els):
+        self.__data = list()
+        for e in row_els:
+            cells = list()
+            for c in e.getchildren():
+                value = c.getchildren()[0].text
+                if c.get('t') == 's':
+                    value = self.__strings[int(value)].value
+                cells.append(ExcelCell(index=c.get('r'), value=value))
+            self.__data.append(ExcelRow(e.get('r'), e.get('spans'), cells))
+
+    @property
+    def tables(self):
+        return self.__tables
+
+    def __set_tables(self, table_elements):
+        self.__tables = list()
+        for e in table_elements:
+            rel_id_key = list(filter(
+                lambda k: re.match('\{.*\}id', k),
+                e.keys()
+            ))[0]
+            t_rel = list(filter(
+                lambda r: r.id == e.get(rel_id_key),
+                self._rels
+            ))[0]
+            with self._oofile.open(
+                    f"xl/tables/{t_rel.target.split('/')[-1]}") as f:
+                t_xml_doc = core.XMLDoc(f.read())
+            t_el = core.get_elements(t_xml_doc, 'table')[0]
+            # Find the range of the table here
+            # Add the cells in that range to the Table, all the info about the
+            # table is provided to the Table() when initialized. The Table
+            # class should not be anything more than a home-grown API that
+            # provides a consistent interface regardless of where the data
+            # comes from. In other words, from the perspective of OOTables, it
+            # doesn't matter if the table came from Excel, Word, or PowerPoint
+            # because each one will have the same properties and methods
+            t_rng = ExcelRange(t_el.get('ref'))
+            t_data = list()
+            for r in self.__data:
+                t_row_cells = list()
+                if r.index >= t_rng.upper_bound \
+                        and r.index <= t_rng.lower_bound:
+                    for c in r.cells:
+                        if c.col_n >= t_rng.left_bound_n \
+                                and c.col_n <= t_rng.right_bound_n:
+                            t_row_cells.append(c)
+                        else:
+                            continue
+                    t_data.append(ExcelRow(
+                        r.index, r.span, t_row_cells
+                    ))
+                else:
+                    continue
+
+            # Get the columns
+            t_cols = list(filter(
+                lambda e: re.match('\{.*\}tableColumns$', e.tag),
+                t_el
+            ))[0].getchildren()
+            t_cols = [
+                ExcelColumn(c.get('id'), c.get('name'))
+                for c in t_cols
+            ]
+            self.__tables.append(ExcelTable(
+                t_el.get('name'), t_el.get('displayName'), t_el.get('ref'),
+                t_data, t_cols
+            ))
 
 
 class Book(core.CoreObject):
@@ -90,9 +338,9 @@ class Book(core.CoreObject):
 
     def __set_sheets(self):
         self.__sheets = list()
-        with self._oofile.open(self.__xml_path) as f:
-            doc = core.XMLDoc(f.read())
-        sheets = core.get_elements(doc, 'sheet')
+        # with self._oofile.open(self.__xml_path) as f:
+        #     doc = core.XMLDoc(f.read())
+        sheets = core.get_elements(self.__xml_doc, 'sheet')
         for i in range(len(sheets)):
             key = list(filter(
                 lambda k: re.match('\{.*\}id$', k), sheets[i].keys()
