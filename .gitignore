@@ -1,0 +1,10 @@
+# Virtual Environments
+env/
+venv/
+
+# Developer Preferences
+.vscode/
+requirements.jay.txt
+
+# pycaches
+*.pyc
