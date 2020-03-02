@@ -6,5 +6,8 @@ venv/
 .vscode/
 requirements.jay.txt
 
-# pycaches
+# pycaches and builds
 *.pyc
+build/
+dist/
+*.egg-info
