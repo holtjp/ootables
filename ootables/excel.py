@@ -138,9 +138,10 @@ class ExcelRow:
 
 
 class ExcelColumn:
-    def __init__(self, id, name):
+    def __init__(self, id, name, cells=list(), values=list()):
         self.__id = id
         self.__name = name
+        self.values = values
 
     @property
     def id(self):
@@ -150,6 +151,22 @@ class ExcelColumn:
     def name(self):
         return self.__name
 
+    @property
+    def cells(self):
+        return self.__cells
+
+    @cells.setter
+    def cells(self, cells):
+        self.__cells = cells
+
+    @property
+    def values(self):
+        return self.__values
+
+    @values.setter
+    def values(self, values):
+        self.__values = values
+
 
 class ExcelTable:
     def __init__(self, name, display_name, range, rows, columns):
@@ -157,6 +174,9 @@ class ExcelTable:
         self.__display_name = display_name
         self.__range = range
         self.__rows = rows
+        self.__header = list()
+        self.__set_cols(columns)
+        self.__set_data()
 
     @property
     def name(self):
@@ -171,8 +191,60 @@ class ExcelTable:
         return self.__range
 
     @property
+    def header(self):
+        return self.__header
+
+    @property
     def rows(self):
         return self.__rows
+
+    @property
+    def cols(self):
+        return self.__cols
+
+    def __set_cols(self, cols):
+        # cols = list of ExcelColumns
+        self.__cols = cols
+        # How to tell if the table actually has a header? For now, this will
+        # set the header
+        matches = list()
+        for i in range(len(cols)):
+            if self.__rows[0].cells[i].value == cols[i].name:
+                self.__header.append(cols[i].name)
+                matches.append(True)
+            else:
+                self.__header.append(f'Column{i}')
+                matches.append(False)
+        if sum(matches) == len(matches):
+            self.__first_row = 1
+        else:
+            self.__first_row = 0
+
+        # For each column, get its data from the rows
+        col_cells = dict()
+        col_values = dict()
+        for i in range(len(self.__header)):
+            col_cells[cols[i].name] = list()
+            col_values[cols[i].name] = list()
+        for r in self.__rows[self.__first_row:]:
+            for i in range(len(r.cells)):
+                col_cells[cols[i].name].append(r.cells[i])
+                col_values[cols[i].name].append(r.cells[i].value)
+        for c in cols:
+            c.cells = col_cells[c.name]
+            c.values = col_values[c.name]
+
+    @property
+    def data(self):
+        return self.__data
+
+    def __set_data(self):
+        self.__data = list()
+        for r in self.__rows[self.__first_row:]:
+            row_dict = dict()
+            for i in range(len(r.cells)):
+                row_dict[self.__header[i]] = r.cells[i].value
+            self.__data.append(row_dict)
 
 
 class SharedString:
