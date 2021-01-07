@@ -4,7 +4,7 @@ setuptools.setup(
     name='ootables',
     version='0.1.0',
     packages=['ootables'],
-    install_requires=['lxml==4.5.0'],
+    install_requires=['lxml==4.6.2'],
     author='James Holt',
     author_email='holtjp@outlook.com',
     description='An API for reading data from Microsoft Excel Tables',
